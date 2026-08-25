@@ -1,0 +1,174 @@
+{
+  "ar_enabled": {
+    "description": "启用活动提醒",
+    "hint": "关闭后停止后台检查与推送",
+    "type": "bool",
+    "default": true
+  },
+  "ar_poll_interval": {
+    "description": "后台检查间隔（秒）",
+    "hint": "建议 60：每隔该秒数检查一次活动到点/定时提醒",
+    "type": "int",
+    "default": 60
+  },
+  "ar_send_time": {
+    "description": "定时提醒时间表",
+    "hint": "每条：forward=提前几天(0~10)，time=当天推送时刻 HH:MM，remind_type=普通/@所有人/连发三遍。可在同一天设置多次",
+    "type": "template_list",
+    "default": [
+      {
+        "__template_key": "定时提醒",
+        "forward": 2,
+        "time": "09:00",
+        "remind_type": "普通"
+      },
+      {
+        "__template_key": "定时提醒",
+        "forward": 2,
+        "time": "19:00",
+        "remind_type": "普通"
+      },
+      {
+        "__template_key": "定时提醒",
+        "forward": 1,
+        "time": "09:00",
+        "remind_type": "普通"
+      },
+      {
+        "__template_key": "定时提醒",
+        "forward": 1,
+        "time": "19:00",
+        "remind_type": "@所有人"
+      },
+      {
+        "__template_key": "定时提醒",
+        "forward": 0,
+        "time": "09:00",
+        "remind_type": "@所有人"
+      },
+      {
+        "__template_key": "定时提醒",
+        "forward": 0,
+        "time": "19:00",
+        "remind_type": "@所有人"
+      }
+    ],
+    "templates": {
+      "定时提醒": {
+        "name": "提醒时间",
+        "description": "在活动开始/结束前指定天数、指定时刻推送提醒",
+        "display_item": "time",
+        "items": {
+          "forward": {
+            "description": "提前几天提醒",
+            "hint": "在活动开始/结束前几天进行提醒，最大 10 天，最小 0 天",
+            "type": "int",
+            "default": 0
+          },
+          "time": {
+            "description": "推送时间",
+            "hint": "当天推送提醒的时刻，24 小时制 HH:MM，精确到分钟",
+            "type": "string",
+            "default": "09:00"
+          },
+          "remind_type": {
+            "description": "提醒方式",
+            "hint": "@所有人 需要机器人具备 @全员 权限；连发三遍 会连续发送 3 次",
+            "type": "string",
+            "default": "普通"
+          }
+        }
+      }
+    }
+  },
+  "ar_realtime_remind": {
+    "description": "实时提醒",
+    "hint": "活动开始/结束时到点立即提醒（凌晨 4 点的活动会顺延到 10 点提醒）",
+    "type": "bool",
+    "default": true
+  },
+  "ar_send_async": {
+    "description": "是否同时推送",
+    "hint": "true=同时向所有群推送；false=按 ar_send_interval 排队推送",
+    "type": "bool",
+    "default": false
+  },
+  "ar_send_interval": {
+    "description": "推送间隔（秒）",
+    "hint": "非同时推送时，每隔该秒数向下一个群推送",
+    "type": "float",
+    "default": 0.2
+  },
+  "ar_send_gacha_pool": {
+    "description": "卡池提醒",
+    "hint": "是否提醒限时寻访卡池（不含联合行动、前路回响、常驻/中坚等）",
+    "type": "bool",
+    "default": true
+  },
+  "ar_send_tower_season": {
+    "description": "保全派驻周期提醒",
+    "hint": "是否提醒保全派驻周期（非资源获取周期）",
+    "type": "bool",
+    "default": true
+  },
+  "ar_data_source": {
+    "description": "游戏数据来源",
+    "hint": "auto=优先复用其它插件已下载的 gamedata（如 arknights-query），否则按下方地址自行下载所需 JSON；shared=仅读取共享 gamedata（不下载）；download=始终自行下载",
+    "type": "string",
+    "default": "auto"
+  },
+  "ar_gamedata_base_url": {
+    "description": "游戏数据下载地址（主源）",
+    "hint": "需包含 excel 子目录，如 https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/zh_CN/gamedata",
+    "type": "string",
+    "default": "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/zh_CN/gamedata"
+  },
+  "ar_gamedata_mirrors": {
+    "description": "游戏数据备用下载地址",
+    "hint": "主源下载失败时按顺序尝试的镜像地址（同样需包含 excel 子目录）",
+    "type": "list",
+    "default": [
+      "https://ghproxy.net/https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/zh_CN/gamedata",
+      "https://cdn.jsdelivr.net/gh/Kengxxiao/ArknightsGameData@master/zh_CN/gamedata"
+    ]
+  },
+  "ar_data_refresh_interval": {
+    "description": "自动刷新数据间隔（秒）",
+    "hint": "每隔该秒数重新获取一次活动/卡池等数据，86400=每天",
+    "type": "int",
+    "default": 86400
+  },
+  "ar_request_timeout": {
+    "description": "数据下载超时（秒）",
+    "hint": "单次下载游戏数据 JSON 的超时时间",
+    "type": "int",
+    "default": 90
+  },
+  "ar_platform_id": {
+    "description": "推送平台适配器 ID（留空自动探测）",
+    "hint": "留空时插件自动探测当前运行的平台适配器 ID（推荐）；多平台同时运行时填要推送的那个适配器 ID",
+    "type": "string",
+    "default": ""
+  },
+  "ar_permission_enabled": {
+    "description": "启用管理指令权限校验",
+    "hint": "开启后，开启/关闭活动提醒、刷新活动数据仅允许 ar_admin_ids 白名单或群内 ar_admin_role 角色执行；活动列表/状态所有人可用",
+    "type": "bool",
+    "default": true
+  },
+  "ar_admin_ids": {
+    "description": "管理指令用户 ID 白名单",
+    "hint": "平台用户 ID（如 QQ 号），每行一个。私聊消息无群角色，只能靠此白名单放行",
+    "type": "list",
+    "default": []
+  },
+  "ar_admin_role": {
+    "description": "群内管理指令角色",
+    "hint": "QQ 平台群主 owner、管理员 admin；留空则群消息仅按 ar_admin_ids 白名单放行",
+    "type": "list",
+    "default": [
+      "owner",
+      "admin"
+    ]
+  }
+}

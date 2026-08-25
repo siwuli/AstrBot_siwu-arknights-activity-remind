@@ -1,0 +1,2 @@
+# 下载游戏数据 JSON 用（AstrBot 环境自带，安装时自动校验/安装）
+aiohttp

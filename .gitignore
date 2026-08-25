@@ -1,0 +1,7 @@
+__pycache__/
+.ruff_cache/
+*.pyc
+*.pyo
+dist/
+.idea/
+.vscode/
