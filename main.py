@@ -487,13 +487,26 @@ class ArknightsActivityRemindPlugin(star.Star):
     # ------------------------------------------------------------------
     @staticmethod
     def _sender_field(event: AstrMessageEvent, field: str, default="") -> str:
-        """兼容 dict/对象两种 sender 结构读取字段（aiocqhttp 的 sender 是 dict）。"""
-        sender = getattr(getattr(event, "message_obj", None), "sender", None)
+        """兼容多种 sender 结构读取字段，返回字符串。"""
+        message_obj = getattr(event, "message_obj", None)
+        sender = getattr(message_obj, "sender", None)
+        value = None
         if isinstance(sender, dict):
-            return str(sender.get(field) or default or "")
-        value = getattr(sender, field, None)
-        if value is None and sender is not None and callable(getattr(sender, "get", None)):
             value = sender.get(field)
+        else:
+            value = getattr(sender, field, None)
+            if value is None and sender is not None and callable(getattr(sender, "get", None)):
+                value = sender.get(field)
+        if value in (None, ""):
+            # aiocqhttp：message_obj.sender 是 MessageMember（无 role 字段），
+            # 原始 OneBot 事件在 raw_message 中，sender 为 dict
+            raw = getattr(message_obj, "raw_message", None)
+            if raw is not None:
+                raw_sender = raw.get("sender") if isinstance(raw, dict) else getattr(raw, "sender", None)
+                if isinstance(raw_sender, dict):
+                    raw_value = raw_sender.get(field)
+                    if raw_value not in (None, ""):
+                        return str(raw_value)
         return str(value or default or "")
 
     def _check_manage_permission(self, event: AstrMessageEvent) -> str | None:
