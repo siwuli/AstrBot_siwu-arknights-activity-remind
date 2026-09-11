@@ -1,9 +1,9 @@
 name: arknights_activity_remind
 display_name: 明日方舟活动提醒
 short_desc: 定时/实时提醒明日方舟活动、卡池、危机合约等开闭时间并推送到开启的群
-desc: "移植自 AmiyaBot arknights-activity-remind-2.0：自动获取明日方舟官方游戏数据（活动/主题曲/危机合约/集成战略/生息演算/卡池/保全派驻周期），后台每分钟检查，按配置提前 N 天定时提醒或到点实时提醒开启活动提醒的群；支持 @所有人 / 连发三遍等提醒方式。免 LLM，纯后台轮询 + 主动推送"
-help: "指令：开启活动提醒 / 关闭活动提醒（管理员，群聊）/ 活动列表 [类型] / 刷新活动数据（管理员）/ 活动提醒状态"
-version: 2.0.1
+desc: "移植自 AmiyaBot arknights-activity-remind-2.0：自动获取明日方舟官方游戏数据（活动/主题曲/危机合约/集成战略/生息演算/卡池/保全派驻周期），后台每分钟检查，按配置提前 N 天定时提醒或到点实时提醒开启活动提醒的群；支持 @所有人 / 连发三遍等提醒方式。v2.1.0 多平台适配：群标识不再限定纯数字，兼容 OneBot v11（纯数字群号）、QQ 官方机器人（group_openid）、Telegram（负数 chat_id）、Discord 等任意适配器；订阅按平台分别记录，平台失效时自动跳过并提供清理指令。免 LLM，纯后台轮询 + 主动推送"
+help: "指令：开启活动提醒 / 关闭活动提醒（管理员，群聊）/ 活动列表 [类型] / 刷新活动数据（管理员）/ 活动提醒状态 / 活动提醒清理（管理员，清理失效平台订阅）"
+version: 2.1.0
 author: siwuli
 repo: https://github.com/siwuli/AstrBot_siwu-arknights-activity-remind
 astrbot_version: ">=4.0.0"

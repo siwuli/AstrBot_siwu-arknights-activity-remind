@@ -15,6 +15,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from datetime import datetime, timedelta
 
 from astrbot.api import star
@@ -65,6 +66,49 @@ def _norm_send_time(value) -> list[dict]:
             remind_type = "普通"
         out.append({"forward": forward, "time": time_str, "remind_type": remind_type})
     return out
+
+
+# ----------------------------------------------------------------------
+# 多平台兼容
+# ----------------------------------------------------------------------
+# 各适配器的「群」会话标识形态并不统一，不能假定为纯数字：
+#   - OneBot v11 / aiocqhttp：纯数字 QQ 群号，如 602519154
+#   - QQ 官方机器人        ：十六进制 group_openid，如 8FF0A5DE2922DE19925E1BE9EF3D58A2
+#   - Telegram            ：负数 chat_id，如 -1001234567890
+#   - Discord             ：雪花 ID
+# 会话键由 "平台ID:消息类型:群ID" 拼接，因此群 ID 只要求非空且不含分隔符。
+_GROUP_ID_RE = re.compile(r"^[^:\s]{1,128}$")
+
+
+def _is_valid_group_id(gid) -> bool:
+    """平台无关的群标识校验：非空且不含会话分隔符 ':'。"""
+    return bool(_GROUP_ID_RE.match(str(gid or "").strip()))
+
+
+def _short_id(value, keep: int = 8) -> str:
+    """长 ID 显示时截断（QQ 官方 group_openid 有 32 位，直接打印会刷屏）。"""
+    text = str(value or "").strip()
+    if len(text) <= keep * 2:
+        return text
+    return f"{text[:keep]}…{text[-4:]}"
+
+
+def _parse_target(raw) -> tuple[str, str]:
+    """解析推送目标为 (platform_id, group_id)，便于多框架混用与换平台。
+
+    支持两种写法：
+      - "602519154"                    → 平台留空，推送时自动探测
+      - "qq_official_bot:8FF0A5DE..."  → 指定平台，精确投递
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return "", ""
+    if ":" in text:
+        pid, _, gid = text.partition(":")
+        pid, gid = pid.strip(), gid.strip()
+        if pid and _is_valid_group_id(gid):
+            return pid, gid
+    return "", text
 
 
 class ArknightsActivityRemindPlugin(star.Star):
@@ -257,14 +301,44 @@ class ArknightsActivityRemindPlugin(star.Star):
     # ------------------------------------------------------------------
     # 推送
     # ------------------------------------------------------------------
+    def _live_platform_ids(self) -> list[str]:
+        """当前运行中的平台适配器 ID。
+
+        平台适配器可能晚于插件加载完成，因此这里惰性重探测并刷新缓存，
+        换平台后无需重启插件即可识别到新平台。
+        """
+        detected = self._detect_platform_ids()
+        if detected:
+            self._platform_ids = detected
+        return list(self._platform_ids)
+
     def _enabled_groups(self) -> list[tuple[str, str]]:
-        """返回所有已开启提醒的 (platform_id, group_id) 列表。"""
+        """返回所有已开启提醒的 (platform_id, group_id)。
+
+        群 ID 不再限定为纯数字，兼容 QQ 官方 group_openid、Telegram 负数
+        chat_id 等形态；平台已不存在的订阅会被跳过，避免换平台后持续推送
+        失败刷日志。
+        """
+        live = set(self._live_platform_ids())
         out = []
         for pid, gids in self._groups.items():
+            if live and pid not in live:
+                continue
             for gid in gids:
-                if str(gid).strip().isdigit():
+                if _is_valid_group_id(gid):
                     out.append((pid, str(gid).strip()))
         return out
+
+    def _stale_groups(self) -> list[tuple[str, list[str]]]:
+        """返回平台已不存在的订阅 [(platform_id, [group_id, ...])]，用于提示与清理。"""
+        live = set(self._live_platform_ids())
+        if not live:
+            return []
+        return [
+            (pid, [str(g).strip() for g in gids if _is_valid_group_id(g)])
+            for pid, gids in self._groups.items()
+            if pid not in live
+        ]
 
     async def _push_to_groups(
         self,
@@ -275,7 +349,6 @@ class ArknightsActivityRemindPlugin(star.Star):
         send_interval: float = 0.2,
     ) -> int:
         """向目标群推送文本。remind_type 支持 普通 / @所有人 / 连发三遍。返回成功发送的群数。"""
-        candidates = self._push_platform_candidates()
         chain = MessageChain().message(content)
         if remind_type == "@所有人":
             chain.at_all()
@@ -310,17 +383,18 @@ class ArknightsActivityRemindPlugin(star.Star):
             return False
 
     def _push_platform_candidates(self) -> list[str]:
-        """推送时尝试的平台 ID 列表：优先配置值，其次自动探测。"""
+        """可用于推送的平台 ID 列表：配置值优先，其次当前运行中的平台。
+
+        不再硬编码回退到 "aiocqhttp"，以便在任意适配器（含 QQ 官方机器人）
+        上直接工作。
+        """
         configured = str(self.config.get("ar_platform_id", "") or "").strip()
-        detected = self._platform_ids or self._detect_platform_ids()
-        if detected and not self._platform_ids:
-            self._platform_ids = detected
         candidates: list[str] = []
-        for pid in ([configured] if configured else []) + detected:
-            if pid and pid not in candidates:
+        if configured:
+            candidates.append(configured)
+        for pid in self._live_platform_ids():
+            if pid not in candidates:
                 candidates.append(pid)
-        if not candidates:
-            candidates = ["aiocqhttp"]
         return candidates
 
     def _detect_platform_ids(self) -> list[str]:
@@ -362,7 +436,7 @@ class ArknightsActivityRemindPlugin(star.Star):
             return
         pid = event.get_platform_id() or ""
         gid = str(event.get_group_id() or "").strip()
-        if not pid or not gid.isdigit():
+        if not pid or not _is_valid_group_id(gid):
             event.stop_event()
             yield event.make_result().message("无法识别当前群信息，请稍后再试。")
             return
@@ -470,15 +544,48 @@ class ArknightsActivityRemindPlugin(star.Star):
             f"- 数据来源：{source}",
             f"- 游戏数据：{data_text}",
             f"- 检查间隔：{self.config.get('ar_poll_interval', 60)} 秒",
-            f"- 已开启提醒的群：{len(groups)} 个（{', '.join(gid for _, gid in groups[:8]) or '未开启'}）",
             f"- 推送平台：{', '.join(self._push_platform_candidates()) or '（未探测到）'}",
+            f"- 已开启提醒的群：{len(groups)} 个"
+            f"（{', '.join(_short_id(gid) for _, gid in groups[:8]) or '未开启'}）",
         ]
+        stale = self._stale_groups()
+        if stale:
+            detail = "、".join(f"{pid}（{len(gids)} 个群）" for pid, gids in stale)
+            lines.append(f"- 失效平台订阅：{detail}，可执行「活动提醒清理」移除")
         if self._data.remind_list:
             upcoming = self._data.remind_list[:3]
             lines.append("- 最近提醒：")
             for r in upcoming:
                 node_info = f" {r['node']}" if r.get("node") else ""
                 lines.append(f"  {r['type']} <{r['name']}>{node_info} {r['time_str']} {r['remind_type']}")
+        event.stop_event()
+        yield event.make_result().message("\n".join(lines))
+
+    @filter.command("活动提醒清理")
+    async def purge_stale_remind(self, event: AstrMessageEvent):
+        """清理平台已不存在的订阅（换平台后遗留的旧平台记录）。"""
+        denied = self._check_manage_permission(event)
+        if denied:
+            event.stop_event()
+            yield event.make_result().message(denied)
+            return
+        live = self._live_platform_ids()
+        if not live:
+            event.stop_event()
+            yield event.make_result().message("未探测到运行中的平台适配器，暂不清理。")
+            return
+        removed = []
+        for pid in list(self._groups.keys()):
+            if pid not in live:
+                removed.append((pid, self._groups.pop(pid)))
+        if not removed:
+            event.stop_event()
+            yield event.make_result().message("没有需要清理的订阅。")
+            return
+        self._save_groups()
+        lines = ["已清理以下失效平台的订阅（可在新平台重新执行「开启活动提醒」）："]
+        for pid, gids in removed:
+            lines.append(f"- {pid}：{len(gids)} 个群")
         event.stop_event()
         yield event.make_result().message("\n".join(lines))
 
@@ -535,7 +642,7 @@ class ArknightsActivityRemindPlugin(star.Star):
                 with open(GROUPS_FILE, encoding="utf-8") as f:
                     data = json.load(f)
                 self._groups = {
-                    str(k): [str(g) for g in (v or []) if str(g).strip().isdigit()]
+                    str(k): [str(g).strip() for g in (v or []) if _is_valid_group_id(g)]
                     for k, v in (data or {}).items()
                     if isinstance(v, list)
                 }
