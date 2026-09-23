@@ -111,6 +111,64 @@ def _parse_target(raw) -> tuple[str, str]:
     return "", text
 
 
+# ----------------------------------------------------------------------
+# 跨平台群号解析
+# ----------------------------------------------------------------------
+# platform_alias 插件会把 QQ 官方机器人的 group_openid 透明翻译成真实群号，并把
+# 「群号 -> 该群存在于哪些平台」写进 aliases.json。这里直接读那个文件（不 import
+# 对方插件，避免加载顺序耦合），于是换平台之后，老配置里的群号依然可用。
+_ALIAS_FILE = os.path.join(get_astrbot_data_path(), "platform_alias", "aliases.json")
+_ALIAS_CACHE: dict = {"mtime": None, "data": None}
+
+
+def _alias_group_platforms(group_id) -> list[str]:
+    """群号 -> 已知存在该群的平台适配器 ID 列表；没有映射表时返回 []。"""
+    gid = str(group_id or "").strip()
+    if not gid:
+        return []
+    try:
+        st = os.stat(_ALIAS_FILE)
+    except OSError:
+        return []
+    # 时间戳 + 文件大小一起做键：某些文件系统的时间戳粒度较粗，只看 mtime 会漏掉改动
+    stamp = (st.st_mtime_ns, st.st_size)
+    if _ALIAS_CACHE["mtime"] != stamp or _ALIAS_CACHE["data"] is None:
+        try:
+            with open(_ALIAS_FILE, "r", encoding="utf-8") as f:
+                _ALIAS_CACHE["data"] = json.load(f)
+            _ALIAS_CACHE["mtime"] = stamp
+        except Exception as e:  # noqa: BLE001
+            logger.debug("读取平台映射表失败（不影响推送）: %s", e)
+            return []
+    rec = ((_ALIAS_CACHE["data"] or {}).get("groups") or {}).get(gid)
+    if not isinstance(rec, dict):
+        return []
+    return [str(p).strip() for p in (rec.get("native") or {}) if str(p).strip()]
+
+
+def _resolve_group_targets(group_id, recorded_pid: str, live_pids) -> list[str]:
+    """决定某个订阅群号该投递给哪些平台，返回平台 ID 列表。
+
+    0) 探测不到任何平台 -> 原样返回（启动早期平台还没注册，不做任何猜测）；
+    1) 映射表登记了该群在哪些平台 -> 投这些里正在运行的（换平台免重订阅）；
+    2) 否则原平台还在跑 -> 用原平台（保持旧行为）；
+    3) 都不满足 -> 返回空，交给「清理」指令提示处理。
+
+    刻意不做「只剩一个平台就盲投」的推断：群号在不同平台未必存在，
+    盲投只会把消息发错群或刷一堆 API 报错。要迁移就在新平台执行一次
+    「群绑定」，映射表登记后 1) 会自动接管。
+    """
+    live = [str(p) for p in (live_pids or []) if str(p)]
+    if not live:
+        return [str(recorded_pid)] if str(recorded_pid) else []
+    known = [p for p in _alias_group_platforms(group_id) if p in live]
+    if known:
+        return known
+    if str(recorded_pid) in live:
+        return [str(recorded_pid)]
+    return []
+
+
 class ArknightsActivityRemindPlugin(star.Star):
     """明日方舟活动提醒插件。"""
 
@@ -316,29 +374,42 @@ class ArknightsActivityRemindPlugin(star.Star):
         """返回所有已开启提醒的 (platform_id, group_id)。
 
         群 ID 不再限定为纯数字，兼容 QQ 官方 group_openid、Telegram 负数
-        chat_id 等形态；平台已不存在的订阅会被跳过，避免换平台后持续推送
-        失败刷日志。
+        chat_id 等形态。若 platform_alias 登记了「该群号存在于哪个平台」就以它
+        为准；原平台失效而只剩一个平台在跑时自动改投，换平台后无需重新订阅。
         """
-        live = set(self._live_platform_ids())
-        out = []
+        live = self._live_platform_ids()
+        out: list[tuple[str, str]] = []
+        seen: set[tuple[str, str]] = set()
         for pid, gids in self._groups.items():
-            if live and pid not in live:
-                continue
             for gid in gids:
-                if _is_valid_group_id(gid):
-                    out.append((pid, str(gid).strip()))
+                gid = str(gid).strip()
+                if not _is_valid_group_id(gid):
+                    continue
+                for target in _resolve_group_targets(gid, pid, live):
+                    if (target, gid) not in seen:
+                        seen.add((target, gid))
+                        out.append((target, gid))
         return out
 
     def _stale_groups(self) -> list[tuple[str, list[str]]]:
-        """返回平台已不存在的订阅 [(platform_id, [group_id, ...])]，用于提示与清理。"""
-        live = set(self._live_platform_ids())
+        """返回确实无处可投的订阅 [(platform_id, [group_id, ...])]，用于提示与清理。"""
+        live = self._live_platform_ids()
         if not live:
             return []
-        return [
-            (pid, [str(g).strip() for g in gids if _is_valid_group_id(g)])
-            for pid, gids in self._groups.items()
-            if pid not in live
-        ]
+        out: list[tuple[str, list[str]]] = []
+        for pid, gids in self._groups.items():
+            if pid in live:
+                continue
+            remaining = [
+                str(g).strip()
+                for g in gids
+                if _is_valid_group_id(g)
+                and not _resolve_group_targets(str(g).strip(), pid, live)
+            ]
+            if remaining:
+                out.append((pid, remaining))
+        return out
+
 
     async def _push_to_groups(
         self,
