@@ -174,7 +174,10 @@ class RemindData:
                         if resp.status != 200:
                             logger.warning("下载 %s 失败: HTTP %s", url, resp.status)
                             return
-                        data = await resp.json(encoding="utf-8")
+                        # ghproxy 等镜像会以 text/plain 返回 JSON；aiohttp 的 resp.json() 默认
+                        # 校验 mimetype，不符会直接抛「unexpected mimetype」导致 4 张表全下载失败
+                        # （本机有共享 gamedata 兜底看不出来，全新安装只装本插件就会没数据）。
+                        data = await resp.json(content_type=None, encoding="utf-8")
                 tmp = path + ".tmp"
                 with open(tmp, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False)

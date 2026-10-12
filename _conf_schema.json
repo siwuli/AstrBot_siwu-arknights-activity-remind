@@ -119,9 +119,9 @@
   },
   "ar_gamedata_base_url": {
     "description": "游戏数据下载地址（主源）",
-    "hint": "需包含 excel 子目录，如 https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/zh_CN/gamedata",
+    "hint": "需包含 excel 子目录。默认走可达镜像——raw.githubusercontent 在部分网络/机房会被重置连接（实测直接不可达），如需直连请自行确认",
     "type": "string",
-    "default": "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/zh_CN/gamedata"
+    "default": "https://cdn.jsdelivr.net/gh/Kengxxiao/ArknightsGameData@master/zh_CN/gamedata"
   },
   "ar_gamedata_mirrors": {
     "description": "游戏数据备用下载地址",
@@ -129,7 +129,8 @@
     "type": "list",
     "default": [
       "https://ghproxy.net/https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/zh_CN/gamedata",
-      "https://cdn.jsdelivr.net/gh/Kengxxiao/ArknightsGameData@master/zh_CN/gamedata"
+      "https://gh-proxy.com/https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/zh_CN/gamedata",
+      "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/zh_CN/gamedata"
     ]
   },
   "ar_data_refresh_interval": {
