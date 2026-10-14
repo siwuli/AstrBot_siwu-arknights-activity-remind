@@ -1,78 +1,55 @@
-# 明日方舟活动提醒（AstrBot 版）
+# 明日方舟活动提醒（arknights_activity_remind）
 
-移植自 AmiyaBot **arknights-activity-remind-2.0**，并在 AstrBot（>= 4.0.0）上运行。
-纯后台轮询 + 主动推送，不依赖 LLM。
+定时与实时提醒明日方舟活动、卡池、危机合约等开闭时间，并推送到开启提醒的群。
 
 ## 功能
-
-- 自动获取明日方舟官方游戏数据，构建提醒列表：
-  - 活动 / 新主题曲：开始、结束、奖励兑换截止
-  - 活动节点（活动主题下各阶段：开始 / 开放）
-  - 危机合约：赛季开始、结束
-  - 卡池：限定、联动、双 UP 等限时卡池开始、结束（不含常驻 / 中坚 / 联合行动等）
-  - 保全派驻周期：开始、结束
-- **实时提醒**：事件到点立即推送（凌晨 4 点的事件顺延到 10 点）
-- **定时提醒**：按配置提前 N 天（0~10）在指定时刻推送，支持三种提醒方式：
-  - 普通
-  - `@所有人`（需要机器人具备 @全员 权限）
-  - 连发三遍
-- 群内可自主订阅：开启 / 关闭活动提醒（管理员）
-
-## 安装
-
-1. 在 AstrBot 网页端「插件管理」中上传本插件 zip 安装，或解压到 `data/plugins/` 后重启。
-2. 安装后给机器人发送 `活动提醒状态` 确认数据已就绪。
-3. 在目标群发送 `开启活动提醒`（需管理员）订阅推送。
+- 获取官方游戏数据，构建活动与卡池提醒列表
+- 覆盖活动、主题曲、危机合约、卡池、保全派驻
+- 到点实时提醒，也可按配置提前 N 天定时提醒
+- 提醒方式支持普通、@所有人 与连发三遍
+- 群内自主订阅与取消，支持多平台群标识
 
 ## 指令
-
 | 指令 | 说明 | 权限 |
 | --- | --- | --- |
 | `开启活动提醒` | 本群订阅活动提醒 | 管理员（群聊） |
 | `关闭活动提醒` | 本群取消订阅 | 管理员（群聊） |
-| `活动列表 [类型]` | 查看未来提醒列表，可过滤类型（活动/危机合约/新主题曲/集成战略/生息演算/保全派驻周期/卡池） | 所有人 |
-| `刷新活动数据` | 强制刷新游戏数据并重建列表 | 管理员 |
+| `活动列表 [类型]` | 查看未来提醒列表，可按类型过滤 | 所有人 |
+| `刷新活动数据` | 强制刷新数据并重建列表 | 管理员 |
 | `活动提醒状态` | 查看插件与数据状态 | 所有人 |
+| `活动提醒清理` | 清理失效平台的订阅 | 管理员 |
 
-## 配置说明
-
-| 配置项 | 说明 | 默认 |
+## 配置
+| 配置项 | 默认 | 说明 |
 | --- | --- | --- |
-| `ar_enabled` | 总开关 | true |
-| `ar_poll_interval` | 后台检查间隔（秒），建议 60 | 60 |
-| `ar_send_time` | 定时提醒时间表（forward 提前天数 / time HH:MM / remind_type 普通、@所有人、连发三遍） | 每天 9:00、19:00，提前 2/1/0 天 |
-| `ar_realtime_remind` | 到点实时提醒 | true |
-| `ar_send_async` | 同时向所有群推送（true），否则排队（false） | false |
-| `ar_send_interval` | 排队推送的群间间隔（秒） | 0.2 |
-| `ar_send_gacha_pool` | 是否提醒限时卡池 | true |
-| `ar_send_tower_season` | 是否提醒保全派驻周期 | true |
-| `ar_data_source` | 数据来源：auto / shared / download | auto |
-| `ar_gamedata_base_url` | 自行下载时的主数据源 | GitHub raw（Kengxxiao/ArknightsGameData） |
-| `ar_gamedata_mirrors` | 备用数据源（ghproxy / jsdelivr 等） | 见配置 |
-| `ar_data_refresh_interval` | 自动刷新数据间隔（秒） | 86400（每天） |
-| `ar_request_timeout` | 数据下载超时（秒） | 90 |
-| `ar_platform_id` | 推送平台适配器 ID，留空自动探测 | 空 |
-| `ar_permission_enabled` / `ar_admin_ids` / `ar_admin_role` | 管理指令权限 | 群主 owner / 管理员 admin |
+| `ar_enabled` | true | 启用活动提醒 |
+| `ar_poll_interval` | 60 | 后台检查间隔（秒） |
+| `ar_send_time` | 每天 9:00/19:00 | 定时提醒时间表 |
+| `ar_realtime_remind` | true | 到点实时提醒 |
+| `ar_send_async` | false | 同时推送所有群 |
+| `ar_send_interval` | 0.2 | 排队推送的群间间隔（秒） |
+| `ar_send_gacha_pool` | true | 提醒限时卡池 |
+| `ar_send_tower_season` | true | 提醒保全派驻周期 |
+| `ar_data_source` | auto | 数据来源，默认自动 |
+| `ar_gamedata_base_url` | jsDelivr 镜像 | 自行下载时的主数据源 |
+| `ar_gamedata_mirrors` | 见配置 | 备用数据源列表 |
+| `ar_data_refresh_interval` | 86400 | 自动刷新数据间隔（秒） |
+| `ar_request_timeout` | 90 | 数据下载超时（秒） |
+| `ar_platform_id` | 空 | 推送平台适配器 ID |
+| `ar_permission_enabled` | true | 管理指令权限校验 |
+| `ar_admin_ids` | [] | 管理指令用户白名单 |
+| `ar_admin_role` | ["owner","admin"] | 群内管理指令角色 |
 
-## 数据来源
+## 安装
+1. 上传插件 zip 安装，或解压到 `data/plugins/` 后重启 AstrBot。
+2. 免额外依赖，仅用 AstrBot 环境自带的 aiohttp。
+3. 在目标群发送 `开启活动提醒`（需管理员）完成订阅。
 
-插件仅需要 4 张 JSON 表：`activity_table`、`crisis_v2_table`、`gacha_table`、`climb_tower_table`。
-
-- **auto（默认）**：优先复用其它插件已下载的共享 gamedata（如 `siwu-arknights-query`
-  存放于 `{astrbot_data}/resource/gamedata/`），无需重复下载；
-  若没有则按 `ar_gamedata_base_url` / `ar_gamedata_mirrors` 自行下载所需 JSON 到
-  `{astrbot_data}/arknights_activity_remind/excel/`。
-- **shared**：仅使用共享 gamedata（需同机安装提供 gamedata 的插件）。
-- **download**：始终自行下载。
-
-## 存储位置
-
-- 数据缓存：`{astrbot_data}/arknights_activity_remind/excel/`
-- 订阅群列表：`{astrbot_data}/arknights_activity_remind/groups.json`
-
-## 常见问题
-
-- **活动列表为空 / 数据未就绪**：检查服务器是否能访问配置的数据源；使用 `刷新活动数据`
-  手动触发；已有 `arknights-query` 时切换 `ar_data_source=shared`。
-- **`@所有人` 未生效**：需要机器人账号在群内具备 @全体成员 权限，且平台适配器支持。
-- **数据不更新**：`ar_data_refresh_interval` 为 86400（每天刷新一次），也可用 `刷新活动数据` 强制更新。
+## 版本记录
+| 版本 | 说明 |
+| --- | --- |
+| 2.2.3 | 精简文档 |
+| 2.2.2 | 下载解析兼容 text/plain 响应 |
+| 2.2.0 | 订阅改用真实群号，可跨平台 |
+| 2.1.0 | 群标识不再限定纯数字 |
+| 2.0.1 | 首个 AstrBot 版本 |
